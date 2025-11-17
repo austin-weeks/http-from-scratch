@@ -27,5 +27,13 @@ func main() {
 		fmt.Printf("- Method: %s\n", r.RequestLine.Method)
 		fmt.Printf("- Target: %s\n", r.RequestLine.RequestTarget)
 		fmt.Printf("- Version: %s\n", r.RequestLine.HttpVersion)
+
+		fmt.Println("Headers:")
+		for name, value := range r.Headers {
+			fmt.Printf("- %s: %s\n", name, value)
+		}
+
+		fmt.Println("Body:")
+		fmt.Println(string(r.Body))
 	}
 }

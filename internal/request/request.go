@@ -5,7 +5,10 @@ import (
 	"bytes"
 	"errors"
 	"io"
+	"strconv"
 	"strings"
+
+	"github.com/austin-weeks/http-from-scratch/internal/headers"
 )
 
 type parseState int
@@ -16,11 +19,15 @@ var crlf = []byte("\r\n")
 
 const (
 	initialized parseState = iota
+	parsingHeaders
+	parsingBody
 	done
 )
 
 type Request struct {
 	RequestLine RequestLine
+	Headers     headers.Headers
+	Body        []byte
 	state       parseState
 }
 
@@ -32,7 +39,8 @@ type RequestLine struct {
 
 func RequestFromReader(reader io.Reader) (*Request, error) {
 	r := &Request{
-		state: initialized,
+		state:   initialized,
+		Headers: headers.NewHeaders(),
 	}
 	buf := make([]byte, bufferSize)
 	bufLen := 0
@@ -57,10 +65,13 @@ func RequestFromReader(reader io.Reader) (*Request, error) {
 		// Handle non-EOF errors
 		if readErr != nil {
 			if errors.Is(readErr, io.EOF) {
-				r.state = done
-				break
+				if r.state == parsingBody {
+					return nil, errors.New("body shorter than reported Content-Length")
+				} else {
+					break
+				}
 			} else {
-				return nil, err
+				return nil, readErr
 			}
 		}
 	}
@@ -72,9 +83,13 @@ func (r *Request) parse(data []byte) (int, error) {
 	read := 0
 loop:
 	for {
+		curr := data[read:]
+		if len(curr) == 0 {
+			break loop
+		}
 		switch r.state {
 		case initialized:
-			rl, n, err := parseRequestLine(data[read:])
+			rl, n, err := parseRequestLine(curr)
 			if err != nil {
 				return 0, err
 			}
@@ -82,8 +97,37 @@ loop:
 				break loop
 			}
 			r.RequestLine = *rl
-			r.state = done
+			r.state = parsingHeaders
 			read += n
+
+		case parsingHeaders:
+			n, doneParsing, err := r.Headers.Parse(curr)
+			if err != nil {
+				return 0, err
+			}
+			if n == 0 {
+				break loop
+			}
+			read += n
+			if doneParsing {
+				if r.hasBody() {
+					r.state = parsingBody
+				} else {
+					r.state = done
+				}
+			}
+
+		case parsingBody:
+			cl := r.getContentLength()
+			bodyDataLen := len(curr)
+			read += bodyDataLen
+			r.Body = append(r.Body, curr...)
+			bodyLen := len(r.Body)
+			if bodyLen > cl {
+				return 0, errors.New("body longer than reported Content-Length")
+			} else if bodyLen == cl {
+				r.state = done
+			}
 
 		case done:
 			break loop
@@ -124,4 +168,20 @@ func parseRequestLine(b []byte) (*RequestLine, int, error) {
 		RequestTarget: t,
 		Method:        m,
 	}, read, nil
+}
+
+func (r Request) hasBody() bool {
+	return r.getContentLength() > 0
+}
+
+func (r Request) getContentLength() int {
+	clheader := r.Headers.Get("Content-Length")
+	if clheader == "" {
+		return 0
+	}
+	cl, err := strconv.Atoi(clheader)
+	if err != nil {
+		return 0
+	}
+	return cl
 }
