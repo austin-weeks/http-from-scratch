@@ -14,17 +14,41 @@ var (
 	fieldNameRegex = regexp.MustCompile("^[a-zA-Z0-9!#$%&'*+-./^_`|~]+$")
 )
 
-type Headers map[string]string
-
-func NewHeaders() Headers {
-	return make(Headers)
+type Headers struct {
+	hMap map[string]string
 }
 
-func (h Headers) Get(key string) string {
-	return h[strings.ToLower(key)]
+func NewHeaders() *Headers {
+	return &Headers{
+		hMap: make(map[string]string),
+	}
 }
 
-func (h Headers) Parse(data []byte) (n int, done bool, err error) {
+func (h *Headers) Get(key string) string {
+	return h.hMap[strings.ToLower(key)]
+}
+
+func (h *Headers) Set(name, value string) {
+	name = strings.ToLower(name)
+	if v, ok := h.hMap[name]; ok {
+		value = fmt.Sprintf("%s, %s", v, value)
+	}
+
+	h.hMap[name] = value
+}
+
+func (h *Headers) OverwriteSet(name, value string) {
+	name = strings.ToLower(name)
+	h.hMap[name] = value
+}
+
+func (h *Headers) ForEach(fn func(k, v string)) {
+	for k, v := range h.hMap {
+		fn(k, v)
+	}
+}
+
+func (h *Headers) Parse(data []byte) (n int, done bool, err error) {
 	i := bytes.Index(data, crlf)
 	if i == -1 {
 		return 0, false, nil
@@ -49,11 +73,7 @@ func (h Headers) Parse(data []byte) (n int, done bool, err error) {
 	nameStr := string(bytes.ToLower(name))
 	valueStr := string(bytes.TrimSpace(value))
 
-	if v, ok := h[nameStr]; ok {
-		valueStr = fmt.Sprintf("%s, %s", v, valueStr)
-	}
-
-	h[nameStr] = valueStr
+	h.Set(nameStr, valueStr)
 
 	return read, false, nil
 }

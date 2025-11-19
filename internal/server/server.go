@@ -2,7 +2,6 @@
 package server
 
 import (
-	"bytes"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -65,29 +64,6 @@ func (s *Server) handle(conn net.Conn) {
 		return
 	}
 
-	status := response.StatusOK
-	var body bytes.Buffer
-	handlerErr := s.handler(&body, r)
-	if handlerErr != nil {
-		status = handlerErr.StatusCode
-		body = *bytes.NewBuffer([]byte(handlerErr.Message))
-	}
-
-	headers := response.GetDefaultHeaders(body.Len())
-	err = response.WriteStatusLine(conn, status)
-	if err != nil {
-		slog.Error("failed to write response status line", "connection", conn, "request", r, "error", err)
-		return
-	}
-
-	err = response.WriteHeaders(conn, headers)
-	if err != nil {
-		slog.Error("failed to write response headers", "connection", conn, "request", r, "error", err)
-		return
-	}
-
-	_, err = body.WriteTo(conn)
-	if err != nil {
-		slog.Error("failed to write response body", "connection", conn, "request", r, "error", err)
-	}
+	w := response.NewWriter(conn)
+	s.handler(w, r)
 }

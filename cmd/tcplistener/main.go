@@ -29,9 +29,9 @@ func main() {
 		fmt.Printf("- Version: %s\n", r.RequestLine.HttpVersion)
 
 		fmt.Println("Headers:")
-		for name, value := range r.Headers {
+		r.Headers.ForEach(func(name, value string) {
 			fmt.Printf("- %s: %s\n", name, value)
-		}
+		})
 
 		fmt.Println("Body:")
 		fmt.Println(string(r.Body))

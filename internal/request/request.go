@@ -26,7 +26,7 @@ const (
 
 type Request struct {
 	RequestLine RequestLine
-	Headers     headers.Headers
+	Headers     *headers.Headers
 	Body        []byte
 	state       parseState
 }

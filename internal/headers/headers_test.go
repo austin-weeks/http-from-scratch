@@ -14,7 +14,7 @@ func TestHeadersParsing(t *testing.T) {
 	n, done, err := headers.Parse(data)
 	require.NoError(t, err)
 	require.NotNil(t, headers)
-	assert.Equal(t, "localhost:42069", headers["host"])
+	assert.Equal(t, "localhost:42069", headers.Get("Host"))
 	assert.Equal(t, 23, n)
 	assert.False(t, done)
 
@@ -23,7 +23,7 @@ func TestHeadersParsing(t *testing.T) {
 	data = []byte("Content-Type:   application/json   \r\n\r\n")
 	n, done, err = headers.Parse(data)
 	require.NoError(t, err)
-	assert.Equal(t, "application/json", headers["content-type"])
+	assert.Equal(t, "application/json", headers.Get("Content-Type"))
 	assert.Equal(t, n, 37)
 	assert.False(t, done)
 
@@ -35,8 +35,8 @@ func TestHeadersParsing(t *testing.T) {
 	_, done, err = headers.Parse(data[n:])
 	require.NoError(t, err)
 	assert.False(t, done)
-	assert.Equal(t, "localhost:42069", headers["host"])
-	assert.Equal(t, "application/json", headers["content-type"])
+	assert.Equal(t, "localhost:42069", headers.Get("Host"))
+	assert.Equal(t, "application/json", headers.Get("content-type"))
 
 	// Test: Valid done
 	headers = NewHeaders()
@@ -60,8 +60,8 @@ func TestHeadersParsing(t *testing.T) {
 
 	// Test: Duplicate headers
 	headers = NewHeaders()
-	headers["accept"] = "application/json"
+	headers.Set("Accept", "application/json")
 	_, _, err = headers.Parse([]byte("Accept: xml\r\n"))
 	require.NoError(t, err)
-	assert.Equal(t, "application/json, xml", headers["accept"])
+	assert.Equal(t, "application/json, xml", headers.Get("Accept"))
 }
