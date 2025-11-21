@@ -2,7 +2,6 @@
 package response
 
 import (
-	"errors"
 	"fmt"
 	"io"
 	"strconv"
@@ -30,32 +29,17 @@ const (
 	StatusInternalError StatusCode = 500
 )
 
-type writeState string
-
-const (
-	writeStateStatusLine writeState = "status line"
-	writeStateHeaders    writeState = "headers"
-	writeStateBody       writeState = "body"
-	writeStateDone       writeState = "done"
-)
-
 type Writer struct {
-	state writeState
-	conn  io.Writer
+	conn io.Writer
 }
 
 func NewWriter(connection io.Writer) *Writer {
 	return &Writer{
-		state: writeStateStatusLine,
-		conn:  connection,
+		conn: connection,
 	}
 }
 
 func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
-	if w.state != writeStateStatusLine {
-		return errors.New("status line has already been written")
-	}
-
 	reason := ""
 	switch statusCode {
 	case StatusOK:
@@ -73,15 +57,10 @@ func (w *Writer) WriteStatusLine(statusCode StatusCode) error {
 		}
 		statusLine = statusLine[n:]
 	}
-	w.state = writeStateHeaders
 	return nil
 }
 
 func (w *Writer) WriteHeaders(headers *headers.Headers) error {
-	if w.state != writeStateHeaders {
-		return fmt.Errorf("it is not time to write headers - current write state is %s", w.state)
-	}
-
 	var p []byte
 	headers.ForEach(func(k, v string) {
 		k = formatHeaderName(k)
@@ -96,15 +75,10 @@ func (w *Writer) WriteHeaders(headers *headers.Headers) error {
 		}
 		p = p[n:]
 	}
-	w.state = writeStateBody
 	return nil
 }
 
 func (w *Writer) WriteBody(p []byte) (int, error) {
-	if w.state != writeStateBody {
-		return 0, fmt.Errorf("it is not time to write body - current write stat is %s", w.state)
-	}
-
 	// don't mutate p
 	written := 0
 	for written < len(p) {
@@ -114,15 +88,10 @@ func (w *Writer) WriteBody(p []byte) (int, error) {
 			return written, err
 		}
 	}
-	w.state = writeStateDone
 	return written, nil
 }
 
 func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
-	if w.state != writeStateBody {
-		return 0, fmt.Errorf("it is not time to write body - current write stat is %s", w.state)
-	}
-
 	lenHex := strconv.FormatInt(int64(len(p)), 16)
 	body := fmt.Appendf(nil, "%s\r\n%s\r\n", lenHex, p)
 	written := 0
@@ -137,10 +106,6 @@ func (w *Writer) WriteChunkedBody(p []byte) (int, error) {
 }
 
 func (w *Writer) WriteChunkedBodyDone() (int, error) {
-	if w.state != writeStateBody {
-		return 0, fmt.Errorf("it is not time to write body - current write stat is %s", w.state)
-	}
-
 	body := []byte("0\r\n\r\n")
 	written := 0
 	for written < len(body) {
@@ -150,8 +115,11 @@ func (w *Writer) WriteChunkedBodyDone() (int, error) {
 			return written, err
 		}
 	}
-	w.state = writeStateDone
 	return written, nil
+}
+
+func (w *Writer) WriteTrailers(t *headers.Headers) error {
+	return w.WriteHeaders(t)
 }
 
 func formatHeaderName(h string) string {

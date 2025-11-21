@@ -1,18 +1,13 @@
 package main
 
 import (
-	"errors"
-	"fmt"
-	"io"
 	"log"
 	"log/slog"
-	"net/http"
 	"os"
 	"os/signal"
 	"strings"
 	"syscall"
 
-	"github.com/austin-weeks/http-from-scratch/internal/headers"
 	"github.com/austin-weeks/http-from-scratch/internal/request"
 	"github.com/austin-weeks/http-from-scratch/internal/response"
 	"github.com/austin-weeks/http-from-scratch/internal/server"
@@ -43,6 +38,13 @@ func handler(w *response.Writer, r *request.Request) {
 	var statusCode response.StatusCode
 	var body []byte
 	switch r.RequestLine.RequestTarget {
+	case "/video":
+		if r.RequestLine.Method != "GET" {
+			statusCode = response.StatusBadRequest
+			break
+		}
+		sendVideo(w)
+		return
 	case "/yourproblem":
 		statusCode = response.StatusBadRequest
 		body = []byte(`
@@ -97,51 +99,5 @@ func handler(w *response.Writer, r *request.Request) {
 	_, err = w.WriteBody(body)
 	if err != nil {
 		slog.Error("failed to write body", "error", err, "request", r)
-	}
-}
-
-func proxyHTTPBin(path string, w *response.Writer) {
-	path = fmt.Sprintf("https://httpbin.org/%s", path)
-	r, err := http.Get(path)
-	if err != nil {
-		slog.Error("failed to fetch from httpbin", "error", err, "path", path)
-		return
-	}
-	defer r.Body.Close() // nolint
-
-	err = w.WriteStatusLine(response.StatusOK)
-	if err != nil {
-		slog.Error("failed to write status line", "error", err, "path", path)
-		return
-	}
-	h := headers.NewHeaders()
-	h.Set("Connection", "close")
-	h.Set("Content-Type", "application/json")
-	h.Set("Transfer-Encoding", "chunked")
-
-	err = w.WriteHeaders(h)
-	if err != nil {
-		slog.Error("failed to write headers", "error", err, "path", path)
-		return
-	}
-
-	buf := make([]byte, 32)
-	for {
-		n, err := r.Body.Read(buf)
-		if err != nil {
-			if !errors.Is(err, io.EOF) {
-				slog.Error("failed to read httpbin response", "error", err, "path", path)
-			}
-			break
-		}
-		slog.Debug("writing chunked body", "bytes", n)
-		_, err = w.WriteChunkedBody(buf[:n])
-		if err != nil {
-			slog.Error("failed to write httpbin response body", "error", err, "path", path, "body", buf[n:])
-		}
-	}
-	_, err = w.WriteChunkedBodyDone()
-	if err != nil {
-		slog.Error("failed to write httpbin response body", "error", err, "path", path)
 	}
 }
